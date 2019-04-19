@@ -1,3 +1,5 @@
+''' Source: https://github.com/yunjey/pytorch-tutorial/tree/master/tutorials/03-advanced/image_captioning'''
+
 import torch
 import torchvision.transforms as transforms
 import torch.utils.data as data
