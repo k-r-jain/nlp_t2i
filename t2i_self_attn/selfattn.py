@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torch.utils.data as data
 import os
@@ -10,6 +11,7 @@ from PIL import Image
 import math
 import copy
 
+
 class Embedder(nn.Module):
     def __init__(self, vocab_size, d_model):
         super().__init__()
@@ -19,7 +21,7 @@ class Embedder(nn.Module):
         return self.embed(x)
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_seq_len = 200, dropout = 0.1):
+    def __init__(self, d_model, max_seq_len = 256, dropout = 0.1):
         super().__init__()
         self.d_model = d_model
         self.dropout = nn.Dropout(dropout)
@@ -41,7 +43,7 @@ class PositionalEncoder(nn.Module):
         x = x * math.sqrt(self.d_model)
         #add constant to embedding
         seq_len = x.size(1)
-        pe = Variable(self.pe[:,:seq_len], requires_grad=False)
+        pe = torch.tensor(self.pe[:,:seq_len], requires_grad=False)
         if x.is_cuda:
             pe.cuda()
         x = x + pe
@@ -100,6 +102,7 @@ class MultiHeadAttention(nn.Module):
         bs = q.size(0)
         
         # perform linear operation and split into N heads
+        # print(k.size())
         k = self.k_linear(k).view(bs, -1, self.h, self.d_k)
         q = self.q_linear(q).view(bs, -1, self.h, self.d_k)
         v = self.v_linear(v).view(bs, -1, self.h, self.d_k)
@@ -175,7 +178,7 @@ class Encoder(nn.Module):
 
 
 
-embedder = Embedder(vocab_size = 8000, d_model = 128)
-pos_embedder = PositionalEncoder(d_model = 128)
+# embedder = Embedder(vocab_size = 8000, d_model = 128)
+# pos_embedder = PositionalEncoder(d_model = 128)
 
-encoder = Encoder(vocab_size = 8000, d_model = 128, N = 3, heads = 2, dropout = 0.1)
+# encoder = Encoder(vocab_size = 8000, d_model = 128, N = 3, heads = 2, dropout = 0.1)

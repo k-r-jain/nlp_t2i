@@ -100,4 +100,7 @@ def COCODataLoader(root, json, vocab, transform, batch_size, shuffle, num_worker
 											  shuffle=shuffle,
 											  num_workers=num_workers,
 											  collate_fn=collate_fn)
+
+	
+	# print(len(vocab))
 	return data_loader
