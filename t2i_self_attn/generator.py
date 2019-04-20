@@ -13,17 +13,18 @@ import math
 import copy
 
 class Generator(nn.Module):
-	def __init__(self, z_dim, generator_channels, start_channels = 512, start_size = 4, final_conv_size = 32):
+	def __init__(self, z_dim, generator_channels, start_channels = 512, start_size = 1, final_conv_size = 32):
 		super(Generator, self).__init__()
 		self.start_channels = start_channels
 		self.start_size = start_size
 		self.generator_channels = generator_channels
 
-		self.init_linear = nn.Sequential(
-			nn.Linear(z_dim, start_channels * start_size * start_size),
-			nn.LeakyReLU(negative_slope = 0.01),
-			nn.BatchNorm1d(start_channels * start_size * start_size)
-		)
+		# Two for bidirectional lstm
+		# self.init_linear = nn.Sequential(
+		# 	nn.Linear(z_dim + 2 * self.generator_channels, start_channels * start_size * start_size),
+		# 	nn.LeakyReLU(negative_slope = 0.01),
+		# 	nn.BatchNorm1d(start_channels * start_size * start_size)
+		# )
 
 		modules = []
 		current_size = start_size
@@ -92,9 +93,16 @@ class Generator(nn.Module):
 
 
 
-	def forward(self, z, w):
+	def forward(self, z, w, sent):
 		z = z.view(-1, z.size(2)) # To remove the fake dimension - single channel
-		z = self.init_linear(z)
+
+		# print('z', z.size())
+		sent = sent[:, sent.size(1) - 1, :]
+		# print('sent', sent.size())
+		z = torch.cat((z, sent), dim = 1)
+		# print('cat', z.size())
+
+		# z = self.init_linear(z)
 		z = z.view(-1, self.start_channels, self.start_size, self.start_size)
 		x = self.init_G(z)
 		

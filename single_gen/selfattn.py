@@ -181,11 +181,6 @@ class Encoder(nn.Module):
 
 
 
-
-
-
-
-
 # embedder = Embedder(vocab_size = 8000, d_model = 128)
 # pos_embedder = PositionalEncoder(d_model = 128)
 

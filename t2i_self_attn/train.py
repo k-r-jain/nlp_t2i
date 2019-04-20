@@ -32,10 +32,10 @@ VOCAB_SIZE = len(vocab)
 
 COCO_DIR = '/home/kartik/data/coco/train2014'
 ANNOTATION_FILE = '/home/kartik/data/coco/captions_train2014.json'
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 NUM_EPOCHS = 25
-LR_G = 0.001
-LR_D = 0.001
+LR_G = 1e-3
+LR_D = 1e-3
 EMBEDDING_DIM = 512
 
 TRANSFORMER_DIM = 128
@@ -52,10 +52,10 @@ transform = transforms.Compose([
 	transforms.RandomCrop(FINAL_IMAGE_RES),
 	# transforms.RandomHorizontalFlip(), 
 	transforms.ToTensor(), 
-	transforms.Normalize((0.5, 0.5, 0.5), 
-						(0.5, 0.5, 0.5))])
-# transforms.Normalize((0.485, 0.456, 0.406), 
-# 					(0.229, 0.224, 0.225))])
+	# transforms.Normalize((0.5, 0.5, 0.5), 
+						# (0.5, 0.5, 0.5))])
+transforms.Normalize((0.485, 0.456, 0.406), 
+					(0.229, 0.224, 0.225))])
 
 data_loader = COCODataLoader(COCO_DIR, ANNOTATION_FILE, vocab, 
 							transform, BATCH_SIZE,
@@ -65,7 +65,7 @@ data_loader = COCODataLoader(COCO_DIR, ANNOTATION_FILE, vocab,
 # embedder = Embedder(vocab_size = VOCAB_SIZE, d_model = EMBEDDING_DIM).to(device)
 encoder = Encoder(vocab_size = VOCAB_SIZE, d_model = TRANSFORMER_DIM, N = TRANSFORMER_LAYERS, heads = TRANSFORMER_HEADS, dropout = TRANSFORMER_DROPOUT).to(device)
 
-generator = Generator(z_dim = Z_DIM, generator_channels = GENERATOR_CHANNELS).to(device)
+generator = Generator(z_dim = Z_DIM, generator_channels = GENERATOR_CHANNELS, start_channels = Z_DIM + 2 * TRANSFORMER_DIM).to(device)
 # summary(generator, ((1, Z_DIM)))
 
 discriminator1 = Discriminator(discriminator_channels = DISCRIMINATOR_CHANNELS, current_size = 64).to(device)
@@ -90,6 +90,10 @@ for epoch in range(NUM_EPOCHS):
 	avg_d_loss = 0.0
 	avg_g_loss = 0.0
 	for i, sample in enumerate(data_loader):
+
+		if i > 200:
+			break
+
 
 		optimizer_d1.zero_grad()
 		optimizer_d2.zero_grad()
@@ -136,11 +140,14 @@ for epoch in range(NUM_EPOCHS):
 		captions_mask = (captions != vocab('<pad>')).unsqueeze(1)
 		# print(captions.size(), captions_mask.size())
 		
-		representations = encoder(captions, captions_mask).transpose(0, 1) # Batch first
+		representations, sent_embeddings = encoder(captions, captions_mask) 
+		# Batch first
+		representations = representations.transpose(0, 1)
+		sent_embeddings = sent_embeddings.transpose(0, 1)
 		# print(representations.size())
 
 		z = torch.randn((BATCH_SIZE, 1, Z_DIM)).to(device)
-		gen_images_64, gen_images_128, gen_images_256 = generator(z, representations)
+		gen_images_64, gen_images_128, gen_images_256 = generator(z, representations, sent_embeddings)
 
 		# predr_1, predr_2, predr_3 = discriminator(images_64, images_128, images_256)
 		# predf_1, predf_2, predf_3 = discriminator(gen_images_64, gen_images_128, gen_images_256)
@@ -154,86 +161,112 @@ for epoch in range(NUM_EPOCHS):
 		# images_256 = images_256[randperm]
 
 		labels = real
-		pred_64 = discriminator1(images_64)
-		pred_128 = discriminator2(images_128)
-		pred_256 = discriminator3(images_256)
+		pred_64_1 = discriminator1(images_64)
+		pred_128_1 = discriminator2(images_128)
+		pred_256_1 = discriminator3(images_256)
 
 		d_loss = 0
-		loss = cost_fn(pred_64, labels)
-		d_loss += loss.item()
-		loss.backward()
+		d_loss_real = 0
+		d_loss_fake = 0
 
-		loss = cost_fn(pred_128, labels)
-		d_loss += loss.item()
-		loss.backward()
+		loss1 = cost_fn(pred_64_1, labels)
+		d_loss += loss1.item()
+		d_loss_real += loss1.item()
+		loss1.backward()
 
-		loss = cost_fn(pred_256, labels)
-		d_loss += loss.item()
-		loss.backward()
+		loss2 = cost_fn(pred_128_1, labels)
+		d_loss += loss2.item()
+		d_loss_real += loss1.item()
+		loss2.backward()
 
-		if i % 100 == 0:
-			optimizer_d1.step()
-			optimizer_d2.step()
-			optimizer_d3.step()
+		loss3 = cost_fn(pred_256_1, labels)
+		d_loss += loss3.item()
+		d_loss_real += loss1.item()
+		loss3.backward()
 
-
+		# optimizer_d1.step()
+		# optimizer_d2.step()
+		# optimizer_d3.step()
 
 		labels = fake
-		pred_64 = discriminator1(gen_images_64.detach())
-		pred_128 = discriminator2(gen_images_128.detach())
-		pred_256 = discriminator3(gen_images_256.detach())
+		pred_64_2 = discriminator1(gen_images_64.detach())
+		pred_128_2 = discriminator2(gen_images_128.detach())
+		pred_256_2 = discriminator3(gen_images_256.detach())
 
 		d_loss = 0
-		loss = cost_fn(pred_64, labels)
-		d_loss += loss.item()
-		loss.backward()
+		loss4 = cost_fn(pred_64_2, labels)
+		d_loss += loss4.item()
+		d_loss_fake += loss4.item()
+		loss4.backward()
 
-		loss = cost_fn(pred_128, labels)
-		d_loss += loss.item()
-		loss.backward()
+		loss5 = cost_fn(pred_128_2, labels)
+		d_loss += loss5.item()
+		d_loss_fake += loss4.item()
+		loss5.backward()
 
-		loss = cost_fn(pred_256, labels)
-		d_loss += loss.item()
-		loss.backward()
+		loss6 = cost_fn(pred_256_2, labels)
+		d_loss += loss6.item()
+		d_loss_fake += loss4.item()
+		loss6.backward()
 
-		if i % 100 == 0:
-			optimizer_d1.step()
-			optimizer_d2.step()
-			optimizer_d3.step()
-
-
+		# optimizer_d1.step()
+		# optimizer_d2.step()
+		# optimizer_d3.step()
 
 		# G trying to fool D by comparing with real
 		labels = real
 		g_loss = 0
 
-		representations = encoder(captions, captions_mask).transpose(0, 1) # Batch first
-		gen_images_64, gen_images_128, gen_images_256 = generator(z, representations)
-		pred_64 = discriminator1(gen_images_64)
-		loss1 = cost_fn(pred_64, labels)
-		g_loss += loss1.item()
-		loss1.backward()
-		optimizer_g.step()
-		
-		optimizer_g.zero_grad()
-		representations = encoder(captions, captions_mask).transpose(0, 1) # Batch first
-		gen_images_64, gen_images_128, gen_images_256 = generator(z, representations)
-		pred_128 = discriminator2(gen_images_128)
-		loss2 = cost_fn(pred_128, labels)
-		g_loss += loss2.item()
-		loss2.backward()
-		optimizer_g.step()
+		# representations, sent_embeddings = encoder(captions, captions_mask) 
+		# # Batch first
+		# representations = representations.transpose(0, 1)
+		# sent_embeddings = sent_embeddings.transpose(0, 1)
 
-		optimizer_g.zero_grad()
-		representations = encoder(captions, captions_mask).transpose(0, 1) # Batch first
-		gen_images_64, gen_images_128, gen_images_256 = generator(z, representations)
-		pred_256 = discriminator3(gen_images_256)
-		loss3 = cost_fn(pred_256, labels)
-		g_loss += loss3.item()
-		loss3.backward()
-		optimizer_g.step()
+		# gen_images_64, gen_images_128, gen_images_256 = generator(z, representations, sent_embeddings)
+		pred_64_3 = discriminator1(gen_images_64)
+		loss7 = cost_fn(pred_64_3, labels)
+		g_loss += loss7.item()
+		# loss7.backward(retain_graph = True)
+		# optimizer_g.step()
 		
-		print('\r iter', i , 'loss:', d_loss, g_loss, end = '')
+		# optimizer_g.zero_grad()
+		# representations, sent_embeddings = encoder(captions, captions_mask) 
+		# # Batch first
+		# representations = representations.transpose(0, 1)
+		# sent_embeddings = sent_embeddings.transpose(0, 1)
+
+		# gen_images_64, gen_images_128, gen_images_256 = generator(z, representations, sent_embeddings)
+		pred_128_3 = discriminator2(gen_images_128)
+		loss8 = cost_fn(pred_128_3, labels)
+		g_loss += loss8.item()
+		# loss8.backward(retain_graph = True)
+		# optimizer_g.step()
+
+		# optimizer_g.zero_grad()
+		# representations, sent_embeddings = encoder(captions, captions_mask) 
+		# # Batch first
+		# representations = representations.transpose(0, 1)
+		# sent_embeddings = sent_embeddings.transpose(0, 1)
+
+		# gen_images_64, gen_images_128, gen_images_256 = generator(z, representations, sent_embeddings)
+		pred_256_3 = discriminator3(gen_images_256)
+		loss9 = cost_fn(pred_256_3, labels)
+		g_loss += loss9.item()
+		# loss9.backward()
+		final_g_loss = loss7 + loss8 + loss9
+		final_g_loss.backward()
+
+
+		if d_loss > g_loss:
+			optimizer_d1.step()
+			optimizer_d2.step()
+			optimizer_d3.step()
+			del pred_64_3, pred_128_3, pred_256_3
+		else:
+			optimizer_g.step()
+			del pred_64_1, pred_64_2, pred_128_1, pred_128_2, pred_256_1, pred_256_2
+		
+		print('\r iter', i , 'loss:', d_loss_fake, d_loss_real, g_loss, end = '')
 		avg_d_loss += d_loss
 		avg_g_loss += g_loss
 	
@@ -241,10 +274,26 @@ for epoch in range(NUM_EPOCHS):
 		# print(image.size(), target.size())
 		# print(target)
 		# print(sample)
-		if i % 500 == 0:
-			transforms.ToPILImage()(gen_images_64[0].cpu().detach()).show()
-			transforms.ToPILImage()(gen_images_128[0].cpu().detach()).show()
-			transforms.ToPILImage()(gen_images_256[0].cpu().detach()).show()
+		if i % 100 == 0:
+			import matplotlib.pyplot as plt
+			plt.imshow(np.transpose(images_256[0].cpu().detach(), (1, 2, 0)))
+			plt.pause(1)
+			# plt.show()
+			plt.imshow(np.transpose(gen_images_64[0].cpu().detach(), (1, 2, 0)))
+			plt.pause(1)
+			# plt.show()
+			plt.imshow(np.transpose(gen_images_128[0].cpu().detach(), (1, 2, 0)))
+			plt.pause(1)
+			# plt.show()
+			plt.imshow(np.transpose(gen_images_256[0].cpu().detach(), (1, 2, 0)))
+			plt.pause(1)
+			# plt.show()
+			# transforms.ToPILImage()(images_64[0].cpu().detach()).show()
+			# transforms.ToPILImage()(images_128[0].cpu().detach()).show()
+			# transforms.ToPILImage()(images_256[0].cpu().detach()).show()
+			# transforms.ToPILImage()(gen_images_64[0].cpu().detach()).show()
+			# transforms.ToPILImage()(gen_images_128[0].cpu().detach()).show()
+			# transforms.ToPILImage()(gen_images_256[0].cpu().detach()).show()
 			print('AVG D and G loss:', avg_d_loss, avg_g_loss)
 			avg_d_loss, avg_g_loss = 0.0, 0.0
 	# rows = 3
