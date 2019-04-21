@@ -9,7 +9,6 @@ import numpy as np
 import nltk
 from PIL import Image
 from build_vocab import Vocabulary
-# from pycocotools.coco import COCO
 from cocoloader import COCODataLoader
 from selfattn import Embedder, PositionalEncoder, Encoder
 from generator import Generator
@@ -129,9 +128,9 @@ for epoch in range(NUM_EPOCHS):
 		representations = representations.transpose(0, 1)
 		sent_embeddings = sent_embeddings.transpose(0, 1)
 		sent_embeddings = sent_embeddings[:, sent_embeddings.size(1) - 1, :]
-		sent_embeddings = sent_embeddings.view(BATCH_SIZE, 2 * TRANSFORMER_DIM, 1, 1)
+		sent_embeddings = sent_embeddings.view(sent_embeddings.size(0), 2 * TRANSFORMER_DIM, 1, 1)
 
-		z = torch.randn((BATCH_SIZE, Z_DIM, 1, 1)).to(device)
+		z = torch.randn((sent_embeddings.size(0), Z_DIM, 1, 1)).to(device)
 
 		gen_images_256 = generator(z, representations, sent_embeddings)
 		fake_pred = discriminator(gen_images_256.detach())
