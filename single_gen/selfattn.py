@@ -12,18 +12,36 @@ import nltk
 from PIL import Image
 import math
 import copy
+import bcolz
+import numpy as np
+import pickle
+glove_path = '/home/kartik/Desktop'
 
 
 class Embedder(nn.Module):
-    def __init__(self, vocab_size, d_model):
+    def __init__(self, vocab_size, d_model = 50, vocab =  None):
         super().__init__()
         self.d_model = d_model
+
+        if vocab is not None:
+            glove_vectors = bcolz.open(f'{glove_path}/6B.50.dat')[:]
+            glove_words = pickle.load(open(f'{glove_path}/6B.50_words.pkl', 'rb'))
+            glove_word2idx = pickle.load(open(f'{glove_path}/6B.50_idx.pkl', 'rb'))
+            self.glove_dict = {w: glove_vectors[glove_word2idx[w]] for w in glove_words}
+
+            self.t2f_vocab = vocab[0]
+            self.t2f_rev_vocab = vocab[1]
+            self.weight_matrix = []
+            for index in self.t2f_vocab:
+                pass
+
+
         self.embed = nn.Embedding(vocab_size, d_model)
     def forward(self, x):
         return self.embed(x)
 
 class PositionalEncoder(nn.Module):
-    def __init__(self, d_model, max_seq_len = 256, dropout = 0.1):
+    def __init__(self, d_model, max_seq_len = 50, dropout = 0.1):
         super().__init__()
         self.d_model = d_model
         self.dropout = nn.Dropout(dropout)
@@ -159,10 +177,11 @@ def get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 class Encoder(nn.Module):
-    def __init__(self, vocab_size, d_model, N, heads, dropout):
+    def __init__(self, vocab_size, d_model, N, heads, dropout, vocab = None):
         super().__init__()
         self.N = N
-        self.embed = Embedder(vocab_size, d_model)
+        self.vocab = vocab
+        self.embed = Embedder(vocab_size, d_model, vocab = self.vocab)
         self.pe = PositionalEncoder(d_model, dropout=dropout)
         self.layers = get_clones(EncoderLayer(d_model, heads, dropout), N)
         self.norm = Norm(d_model)
@@ -170,8 +189,8 @@ class Encoder(nn.Module):
         self.lstm = nn.LSTM(input_size = d_model, hidden_size = d_model, num_layers = 2, batch_first = False, bidirectional = True)
 
     def forward(self, src, mask):
-        x = self.embed(src)
-        x = self.pe(x)
+        x = self.embed(src.transpose(0, 1))
+        x = self.pe(x.transpose(0, 1))
         for i in range(self.N):
             x = self.layers[i](x, mask)
         # return self.norm(x)

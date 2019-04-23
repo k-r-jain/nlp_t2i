@@ -72,7 +72,7 @@ class Face2TextDataset(Dataset):
 
         # get the encoded caption:
         caption = self.text_data[ix]
-
+        # print(caption)
         # pad or truncate the caption length:
         if len(caption) < self.max_caption_len:
             while len(caption) != self.max_caption_len:
@@ -82,6 +82,8 @@ class Face2TextDataset(Dataset):
             caption = caption[: self.max_caption_len]
 
         caption = th.tensor(caption, dtype=th.long)
+
+        # print(self.get_english_caption(caption))
 
         # return the data element
         return img, caption

@@ -45,14 +45,15 @@ TRANSFORMER_LAYERS = 4
 TRANSFORMER_DROPOUT = 0.1
 Z_DIM = 256
 FINAL_IMAGE_RES = 256
+fraction = 0.01
 
 def weights_init(m):
-    classname = m.__class__.__name__
-    if classname.find('Conv') != -1:
-        m.weight.data.normal_(0.0, 0.02)
-    elif classname.find('BatchNorm') != -1:
-        m.weight.data.normal_(1.0, 0.02)
-        m.bias.data.fill_(0)
+	classname = m.__class__.__name__
+	if classname.find('Conv') != -1:
+		m.weight.data.normal_(0.0, 0.02)
+	elif classname.find('BatchNorm') != -1:
+		m.weight.data.normal_(1.0, 0.02)
+		m.bias.data.fill_(0)
 
 
 transform = transforms.Compose([
@@ -67,7 +68,7 @@ transform = transforms.Compose([
 
 data_loader = COCODataLoader(COCO_DIR, ANNOTATION_FILE, vocab, 
 							transform, BATCH_SIZE,
-							shuffle=True, num_workers=8) 
+							shuffle=True, num_workers=8, fraction = fraction) 
 
 
 # embedder = Embedder(vocab_size = VOCAB_SIZE, d_model = EMBEDDING_DIM).to(device)
@@ -85,6 +86,7 @@ discriminator.apply(weights_init)
 
 
 cost_fn = nn.BCELoss().to(device)
+mse_loss = nn.MSELoss().to(device)
 
 optimizer_g = torch.optim.Adam(list(encoder.parameters()) + list(generator.parameters()), lr = LR_G, betas = (0.5, 0.999))
 optimizer_d = torch.optim.Adam(discriminator.parameters(), lr = LR_D, betas = (0.5, 0.999))
@@ -96,7 +98,7 @@ for epoch in range(NUM_EPOCHS):
 	
 	for i, sample in enumerate(data_loader):
 
-		# if i > 200:
+		# if i > 100:
 		# 	break
 
 		images_256 = sample[0].to(device)
@@ -116,7 +118,7 @@ for epoch in range(NUM_EPOCHS):
 		########################### Discriminator ##############################
 
 		discriminator.zero_grad()
-		real_pred = discriminator(images_256)
+		real_pred, _ = discriminator(images_256)
 		d_loss_real = cost_fn(real_pred, real)
 		d_loss_real.backward()
 		D_x = real_pred.mean().item()
@@ -133,11 +135,16 @@ for epoch in range(NUM_EPOCHS):
 		z = torch.randn((sent_embeddings.size(0), Z_DIM, 1, 1)).to(device)
 
 		gen_images_256 = generator(z, representations, sent_embeddings)
-		fake_pred = discriminator(gen_images_256.detach())
+		fake_pred, _ = discriminator(gen_images_256.detach())
 		d_loss_fake = cost_fn(fake_pred, fake)
 		d_loss_fake.backward()
+	
 		D_G_z1 = fake_pred.mean().item()
 
+
+		for p in discriminator.parameters():
+			if p.grad is not None:
+				p.grad.data = p.grad.data.clamp(0.0, 1.0)
 		d_loss = d_loss_real + d_loss_fake
 		optimizer_d.step()
 		
@@ -145,15 +152,19 @@ for epoch in range(NUM_EPOCHS):
 
 
 		generator.zero_grad()
-		adv_pred = discriminator(gen_images_256)
-		g_loss = cost_fn(adv_pred, real)
+		# _, adv_pred_features = discriminator(gen_images_256)
+		# _, real_pred_features = discriminator(images_256)
+		# g_loss = mse_loss(adv_pred_features, real_pred_features)
+		g_loss = mse_loss(gen_images_256, images_256)
+		# g_loss = cost_fn(adv_pred, real)
 		g_loss.backward()
-		D_G_z2 = adv_pred.mean().item()
+		# D_G_z2 = adv_pred.mean().item()
+		D_G_z2 = g_loss.item()
 		optimizer_g.step()
 
 		print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
-              % (epoch, NUM_EPOCHS, i, NUM_BATCHES,
-                 d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
+			  % (epoch, NUM_EPOCHS, i, NUM_BATCHES,
+				 d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
 			
 		if i % 100 == 0:
 			import matplotlib.pyplot as plt
