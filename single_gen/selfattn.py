@@ -22,6 +22,8 @@ class Embedder(nn.Module):
     def __init__(self, vocab_size, d_model = 50, vocab =  None):
         super().__init__()
         self.d_model = d_model
+        self.embed = nn.Embedding(vocab_size, d_model)
+
 
         if vocab is not None:
             glove_vectors = bcolz.open(f'{glove_path}/6B.50.dat')[:]
@@ -33,10 +35,20 @@ class Embedder(nn.Module):
             self.t2f_rev_vocab = vocab[1]
             self.weight_matrix = []
             for index in self.t2f_vocab:
-                pass
+                for word, word_id in self.t2f_rev_vocab.items():
+                    if index == word_id:
+                        try:
+                            self.weight_matrix.append(self.glove_dict[word])
+                        except:
+                            self.weight_matrix.append(self.glove_dict['<unk>'])
+                        break
+            self.weight_matrix = torch.tensor(self.weight_matrix)
+            # print(self.weight_matrix.size())
+
+            self.embed.load_state_dict({'weight': self.weight_matrix})
+            # self.embed.weight.requires_grad = False
 
 
-        self.embed = nn.Embedding(vocab_size, d_model)
     def forward(self, x):
         return self.embed(x)
 

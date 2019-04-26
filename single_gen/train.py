@@ -15,6 +15,9 @@ from generator import Generator
 from discriminator import Discriminator
 import matplotlib.pyplot as plt
 
+from inception_score import inception_score
+
+
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 VOCAB_FILE = '/home/kartik/data/coco/vocab.pkl'
 with open(VOCAB_FILE, 'rb') as f:
@@ -31,18 +34,18 @@ VOCAB_SIZE = len(vocab)
 
 COCO_DIR = '/home/kartik/data/coco/train2014'
 ANNOTATION_FILE = '/home/kartik/data/coco/captions_train2014.json'
-BATCH_SIZE = 80
+BATCH_SIZE = 32
 NUM_EPOCHS = 25
 LR_G = 1e-3
 LR_D = 1e-3
 EMBEDDING_DIM = 512
 
-TRANSFORMER_DIM = 128
+TRANSFORMER_DIM = 50
 GENERATOR_CHANNELS = TRANSFORMER_DIM
 DISCRIMINATOR_CHANNELS = 512
-TRANSFORMER_HEADS = 4
-TRANSFORMER_LAYERS = 4
-TRANSFORMER_DROPOUT = 0.1
+TRANSFORMER_HEADS = 2
+TRANSFORMER_LAYERS = 2
+TRANSFORMER_DROPOUT = 0.3
 Z_DIM = 256
 FINAL_IMAGE_RES = 256
 fraction = 0.01
@@ -152,11 +155,11 @@ for epoch in range(NUM_EPOCHS):
 
 
 		generator.zero_grad()
-		# _, adv_pred_features = discriminator(gen_images_256)
-		# _, real_pred_features = discriminator(images_256)
-		# g_loss = mse_loss(adv_pred_features, real_pred_features)
-		g_loss = mse_loss(gen_images_256, images_256)
-		# g_loss = cost_fn(adv_pred, real)
+		adv_pred, adv_pred_features = discriminator(gen_images_256)
+		_, real_pred_features = discriminator(images_256)
+		g_loss = mse_loss(adv_pred_features, real_pred_features)
+		# g_loss = mse_loss(gen_images_256, images_256)
+		g_loss = cost_fn(adv_pred, real)
 		g_loss.backward()
 		# D_G_z2 = adv_pred.mean().item()
 		D_G_z2 = g_loss.item()
@@ -173,3 +176,8 @@ for epoch in range(NUM_EPOCHS):
 			plt.imshow(np.transpose(gen_images_256[0].cpu().detach(), (1, 2, 0)))
 			plt.pause(1)
 			plt.close()
+		
+		if i % 10 == 0:
+			# print(inception_score(stacked_gen_images.cpu().detach(), cuda = True, batch_size = 4, resize = True, splits = 2, is_tensor = True))
+			# stacked_gen_images = None
+			print(inception_score(gen_images_256.cpu().detach(), cuda = True, batch_size = 4, resize = True, splits = 2, is_tensor = True))

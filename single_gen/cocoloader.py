@@ -99,6 +99,11 @@ def COCODataLoader(root, json, vocab, transform, batch_size, shuffle, num_worker
 					   transform=transform,
 					   fraction = fraction)
 	
+
+	# from inception_score import inception_score
+
+	# print('COCO', inception_score(coco, cuda = True, batch_size = 32, resize = True, splits = 2, is_tensor = False, image_position = 0))
+
 	# Data loader for COCO dataset
 	# This will return (images, captions, lengths) for each iteration.
 	# images: a tensor of shape (batch_size, 3, 224, 224).

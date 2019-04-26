@@ -27,19 +27,47 @@ from t2ftextextractor import load_pickle
 import torchvision.transforms as transforms
 import numpy as np
 import matplotlib.pyplot as plt
+from inception_score import inception_score
+
+
+
+
+
+
+
+
+import torch
+from torch import nn
+from torch.autograd import Variable
+from torch.nn import functional as F
+import torch.utils.data
+
+from torchvision.models.inception import inception_v3
+
+import numpy as np
+from scipy.stats import entropy
+
+
+
+
+
+
+
+
+
 
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 LFW_DIR = '/home/kartik/data/face2text/lfw'
 PROC_PICKLE_PATH = '/home/kartik/data/face2text/processed_text.pkl'
 CAPTION_LEN = 10
-BATCH_SIZE = 16
-NUM_EPOCHS = 5000
+BATCH_SIZE = 8
+NUM_EPOCHS = 50
 LR_G = 1e-3
 LR_D = 1e-4
 # EMBEDDING_DIM = 512
 
-TRANSFORMER_DIM = 128
+TRANSFORMER_DIM = 50
 GENERATOR_CHANNELS = TRANSFORMER_DIM
 DISCRIMINATOR_CHANNELS = 512
 TRANSFORMER_HEADS = 2
@@ -64,15 +92,18 @@ transformation = transforms.Compose([
 
 face2text_dataset = Face2TextDataset(pro_pick_file = PROC_PICKLE_PATH, img_dir = LFW_DIR, img_transform = transformation, captions_len = CAPTION_LEN)
 
+
+print("INCEPTION", inception_score(face2text_dataset, cuda = True, batch_size = 4, resize = True, splits = 2))
+
+
 rev_vocab = face2text_dataset.rev_vocab
 vocab = face2text_dataset.vocab
-print(rev_vocab)
-print('vocab', vocab)
+# print(rev_vocab)
+# print('vocab', vocab)
 VOCAB_SIZE = len(vocab)
 print(VOCAB_SIZE)
 # print(vocab)
 data_loader = DataLoader(face2text_dataset, batch_size = BATCH_SIZE, num_workers = 8, shuffle = True)
-
 
 
 
@@ -96,10 +127,14 @@ optimizer_d = torch.optim.Adam(discriminator.parameters(), lr = LR_D, betas = (0
 NUM_BATCHES = len(data_loader)
 print(NUM_BATCHES)
 
+g_plot = []
+d_plot = []
 for epoch in range(NUM_EPOCHS):
 	print('Epoch', epoch, '-' * 30)
-	
+
+	stacked_gen_images = None
 	for i, sample in enumerate(data_loader):
+
 
 		# if i > 200:
 		#   break
@@ -155,9 +190,10 @@ for epoch in range(NUM_EPOCHS):
 		optimizer_g.zero_grad()
 		adv_pred, adv_pred_features = discriminator(gen_images_256)
 		_, real_pred_features = discriminator(images_256)
-		g_loss = mse_loss(adv_pred_features, real_pred_features)
+		# g_loss = mse_loss(adv_pred_features, real_pred_features)
 		# g_loss = mse_loss(gen_images_256, images_256)
-		g_loss += cost_fn(adv_pred, real)
+		# g_loss += cost_fn(adv_pred, real)
+		g_loss = cost_fn(adv_pred, real)
 		g_loss.backward()
 		# D_G_z2 = adv_pred.mean().item()
 		D_G_z2 = g_loss.item()
@@ -166,16 +202,35 @@ for epoch in range(NUM_EPOCHS):
 		print('[%d/%d][%d/%d] Loss_D: %.4f Loss_G: %.4f D(x): %.4f D(G(z)): %.4f / %.4f'
 			  % (epoch, NUM_EPOCHS, i, NUM_BATCHES,
 				 d_loss.item(), g_loss.item(), D_x, D_G_z1, D_G_z2))
-			
+		
+		g_plot.append(g_loss.item())
+		d_plot.append(d_loss.item())
 		if i % 50 == 0:
 			import matplotlib.pyplot as plt
 			print(face2text_dataset.get_english_caption(captions.transpose(0, 1)[0].cpu().detach()))
-			plt.imshow(np.transpose(images_256[0].cpu().detach(), (1, 2, 0)))
-			plt.pause(1)
-			plt.imshow(np.transpose(gen_images_256[0].cpu().detach(), (1, 2, 0)))
-			plt.pause(1)
-			plt.close()
+			# plt.imshow(np.transpose(images_256[0].cpu().detach(), (1, 2, 0)))
+			# plt.show()
+			# plt.imshow(np.transpose(gen_images_256[0].cpu().detach(), (1, 2, 0)))
+			# plt.show()
+	
+		# if stacked_gen_images is None:
+		# 	stacked_gen_images = gen_images_256.cpu().detach()
+		# else:
+		# 	stacked_gen_images = torch.cat((stacked_gen_images, gen_images_256.cpu().detach()), dim = 0)
+		# print(stacked_gen_images.size())
+		# if i % 10 == 0:
+		# 	# print(inception_score(stacked_gen_images.cpu().detach(), cuda = True, batch_size = 4, resize = True, splits = 2, is_tensor = True))
+		# 	# stacked_gen_images = None
+		# 	print(inception_score(gen_images_256.cpu().detach(), cuda = True, batch_size = 4, resize = True, splits = 2, is_tensor = True))
 
+
+	
+		# print(images_256.cpu().numpy().shape)
+plt.clf()
+plt.plot(g_plot, label = 'G_loss')
+plt.plot(d_plot, label = 'D_loss')
+plt.legend(loc = 'best')
+plt.show()
 
 # for i, sample in enumerate(dataloader):
 
